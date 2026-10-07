@@ -3,20 +3,23 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: API for AI Internship Hunter and Application Agent
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: profile
+  - name: internships
+  - name: applications
+  - name: agent
+  - name: dashboard
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +27,271 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /status:
+    get:
+      operationId: getRuntimeStatus
+      tags: [health]
+      summary: Report configured inference and search providers
+      responses:
+        "200":
+          description: Runtime configuration status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeStatus"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Get tracker counts and recent agent activity
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /profile:
+    get:
+      operationId: getCandidateProfile
+      tags: [profile]
+      summary: Get the current browser session's candidate profile
+      responses:
+        "200":
+          description: Candidate profile state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileState"
+    put:
+      operationId: updateCandidateProfile
+      tags: [profile]
+      summary: Save candidate profile edits
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileInput"
+      responses:
+        "200":
+          description: Updated candidate profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileState"
+  /resume:
+    post:
+      operationId: uploadResume
+      tags: [profile]
+      summary: Extract text from a PDF resume and build a candidate profile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ResumeUploadInput"
+      responses:
+        "200":
+          description: Parsed resume and resulting candidate profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumeResult"
+        "400":
+          description: Invalid, empty, or unsupported resume
+  /internships:
+    get:
+      operationId: listInternships
+      tags: [internships]
+      summary: List opportunities found during this session
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Internship results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Internship"
+  /internships/search:
+    post:
+      operationId: searchInternships
+      tags: [internships, agent]
+      summary: Search current internships or explicitly labeled demo listings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchInput"
+      responses:
+        "200":
+          description: Search results with deterministic fit factors and optional Nemotron explanations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResult"
+        "503":
+          description: Search provider is not configured
+  /internships/{internshipId}:
+    get:
+      operationId: getInternship
+      tags: [internships]
+      summary: Get an internship and its match evidence
+      parameters:
+        - name: internshipId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Internship details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Internship"
+        "404":
+          description: Internship not found in this session
+  /applications:
+    get:
+      operationId: listApplications
+      tags: [applications]
+      summary: List saved opportunities and tracked applications
+      responses:
+        "200":
+          description: Application tracker records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Application"
+    post:
+      operationId: saveApplication
+      tags: [applications]
+      summary: Save an internship to the tracker without submitting it externally
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveApplicationInput"
+      responses:
+        "201":
+          description: Saved tracker record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+        "404":
+          description: Internship not found in this session
+  /applications/{applicationId}:
+    get:
+      operationId: getApplication
+      tags: [applications]
+      summary: Get one tracker record
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tracker record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+        "404":
+          description: Application not found
+    patch:
+      operationId: updateApplication
+      tags: [applications]
+      summary: Update status, notes, or edited generated materials
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplicationUpdate"
+      responses:
+        "200":
+          description: Updated tracker record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+        "404":
+          description: Application not found
+  /applications/{applicationId}/generate:
+    post:
+      operationId: generateApplicationMaterial
+      tags: [applications, agent]
+      summary: Generate one personalized application document using configured Nemotron
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateMaterialInput"
+      responses:
+        "200":
+          description: Generated draft (not submitted)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedMaterial"
+        "503":
+          description: Nemotron is not configured
+  /assistant/chat:
+    post:
+      operationId: askAssistant
+      tags: [agent]
+      summary: Ask Nemotron about the current candidate profile and internships
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistantInput"
+      responses:
+        "200":
+          description: Assistant response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantReply"
+        "503":
+          description: Nemotron is not configured
 components:
   schemas:
     HealthStatus:
@@ -31,6 +299,204 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
-
+      required: [status]
+    RuntimeStatus:
+      type: object
+      properties:
+        ai_configured:
+          type: boolean
+        ai_provider:
+          type: string
+        model:
+          type: string
+        search_configured:
+          type: boolean
+        search_provider:
+          type: string
+        message:
+          type: string
+      required: [ai_configured, ai_provider, model, search_configured, search_provider, message]
+    Dashboard:
+      type: object
+      properties:
+        internships_found:
+          type: integer
+        saved:
+          type: integer
+        applications:
+          type: integer
+        interviews:
+          type: integer
+        pending:
+          type: integer
+        recent_activity:
+          type: array
+          items:
+            $ref: "#/components/schemas/Activity"
+      required: [internships_found, saved, applications, interviews, pending, recent_activity]
+    Activity:
+      type: object
+      properties:
+        id: { type: string }
+        message: { type: string }
+        created_at: { type: string, format: date-time }
+        kind: { type: string }
+      required: [id, message, created_at, kind]
+    CandidateProfile:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: ["string", "null"] }
+        education: { type: array, items: { type: string } }
+        skills: { type: array, items: { type: string } }
+        programming_languages: { type: array, items: { type: string } }
+        frameworks: { type: array, items: { type: string } }
+        ai_ml_skills: { type: array, items: { type: string } }
+        cloud_skills: { type: array, items: { type: string } }
+        projects: { type: array, items: { type: string } }
+        experience: { type: array, items: { type: string } }
+        certifications: { type: array, items: { type: string } }
+        locations: { type: array, items: { type: string } }
+        preferred_roles: { type: array, items: { type: string } }
+      required: [name, email, education, skills, programming_languages, frameworks, ai_ml_skills, cloud_skills, projects, experience, certifications, locations, preferred_roles]
+    ProfileInput:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: ["string", "null"] }
+        education: { type: array, items: { type: string } }
+        skills: { type: array, items: { type: string } }
+        programming_languages: { type: array, items: { type: string } }
+        frameworks: { type: array, items: { type: string } }
+        ai_ml_skills: { type: array, items: { type: string } }
+        cloud_skills: { type: array, items: { type: string } }
+        projects: { type: array, items: { type: string } }
+        experience: { type: array, items: { type: string } }
+        certifications: { type: array, items: { type: string } }
+        locations: { type: array, items: { type: string } }
+        preferred_roles: { type: array, items: { type: string } }
+      required: [name, email, education, skills, programming_languages, frameworks, ai_ml_skills, cloud_skills, projects, experience, certifications, locations, preferred_roles]
+    ProfileState:
+      type: object
+      properties:
+        profile:
+          $ref: "#/components/schemas/CandidateProfile"
+        resume_loaded: { type: boolean }
+        extraction_method: { type: string }
+      required: [profile, resume_loaded, extraction_method]
+    ResumeUploadInput:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+      required: [file]
+    ResumeResult:
+      type: object
+      properties:
+        profile:
+          $ref: "#/components/schemas/CandidateProfile"
+        resume_loaded: { type: boolean }
+        extraction_method: { type: string }
+        extracted_characters: { type: integer }
+        ai_configured: { type: boolean }
+        message: { type: string }
+      required: [profile, resume_loaded, extraction_method, extracted_characters, ai_configured, message]
+    Internship:
+      type: object
+      properties:
+        id: { type: string }
+        company: { type: string }
+        role: { type: string }
+        location: { type: string }
+        remote: { type: boolean }
+        description: { type: string }
+        requirements: { type: array, items: { type: string } }
+        skills: { type: array, items: { type: string } }
+        salary: { type: ["string", "null"] }
+        deadline: { type: ["string", "null"] }
+        source: { type: string }
+        application_url: { type: ["string", "null"] }
+        date_found: { type: string, format: date-time }
+        match_score: { type: integer }
+        matched_skills: { type: array, items: { type: string } }
+        missing_skills: { type: array, items: { type: string } }
+        match_summary: { type: string }
+      required: [id, company, role, location, remote, description, requirements, skills, salary, deadline, source, application_url, date_found, match_score, matched_skills, missing_skills, match_summary]
+    SearchInput:
+      type: object
+      properties:
+        query: { type: string, minLength: 2 }
+        location: { type: string }
+        remote_only: { type: boolean }
+        demo_mode: { type: boolean }
+        max_results: { type: integer, minimum: 1, maximum: 20 }
+      required: [query, location, remote_only, demo_mode, max_results]
+    SearchResult:
+      type: object
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Internship"
+        count: { type: integer }
+        data_mode: { type: string, enum: [live, demo] }
+        ai_used: { type: boolean }
+        message: { type: string }
+      required: [jobs, count, data_mode, ai_used, message]
+    Application:
+      type: object
+      properties:
+        id: { type: string }
+        internship_id: { type: string }
+        company: { type: string }
+        role: { type: string }
+        application_url: { type: ["string", "null"] }
+        date_applied: { type: ["string", "null"], format: date-time }
+        status: { type: string, enum: [saved, applied, assessment, interview, offer, rejected, withdrawn] }
+        notes: { type: string }
+        generated_material:
+          type: object
+          additionalProperties: { type: string }
+        job_description: { type: string }
+        created_at: { type: string, format: date-time }
+      required: [id, internship_id, company, role, application_url, date_applied, status, notes, generated_material, job_description, created_at]
+    SaveApplicationInput:
+      type: object
+      properties:
+        internship_id: { type: string }
+        notes: { type: string }
+      required: [internship_id, notes]
+    ApplicationUpdate:
+      type: object
+      properties:
+        status: { type: string, enum: [saved, applied, assessment, interview, offer, rejected, withdrawn] }
+        notes: { type: string }
+        generated_material:
+          type: object
+          additionalProperties: { type: string }
+    GenerateMaterialInput:
+      type: object
+      properties:
+        kind: { type: string, enum: [cover_letter, recruiter_message, application_email, preparation_suggestions] }
+      required: [kind]
+    GeneratedMaterial:
+      type: object
+      properties:
+        kind: { type: string }
+        content: { type: string }
+        ai_used: { type: boolean }
+        model: { type: string }
+      required: [kind, content, ai_used, model]
+    AssistantInput:
+      type: object
+      properties:
+        message: { type: string, minLength: 1, maxLength: 4000 }
+      required: [message]
+    AssistantReply:
+      type: object
+      properties:
+        reply: { type: string }
+        ai_used: { type: boolean }
+        model: { type: string }
+      required: [reply, ai_used, model]

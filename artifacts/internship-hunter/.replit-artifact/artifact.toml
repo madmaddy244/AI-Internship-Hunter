@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "AI Internship Hunter"
+description = "A resume-aware internship discovery and application workspace for students: search opportunities, see evidence-based fit, generate tailored materials with configured NVIDIA Nemotron through Nebius Token Factory, and track applications."
+version = "1.0.0"
+id = "artifacts/internship-hunter"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19799
+
+[services.development]
+run = "pnpm --filter @workspace/internship-hunter run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/internship-hunter", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/internship-hunter/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19799"
+BASE_PATH = "/"

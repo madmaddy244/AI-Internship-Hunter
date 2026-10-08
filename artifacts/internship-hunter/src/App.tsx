@@ -240,7 +240,7 @@ function DashboardPage({ profile, runtime }: { profile?: CandidateProfile; runti
             <p className="live-preview-disclaimer">Uses the role above and an optional location filter. Check the employer’s page to confirm each listing is still accepting applications.</p>
             {liveError && <ErrorNotice message={liveError} />}
             {liveNotice && <div className="alert alert-info" role="status" data-testid="status-live-preview-message">{liveNotice}</div>}
-            {liveResult?.jobs.length ? <div className="job-list">{liveResult.jobs.map((item) => <InternshipCard key={item.id} internship={item} onOpen={() => setSelectedListing(item)} onSave={() => saveLiveRole(item)} />)}</div> : liveResult && <EmptyState icon={Search} title="No live results to preview">{liveResult.message}</EmptyState>}
+            {liveResult?.jobs.length ? <div className="job-list">{liveResult.jobs.map((item) => <InternshipCard key={item.id} internship={item} dataMode={liveResult.data_mode} onOpen={() => setSelectedListing(item)} onSave={() => saveLiveRole(item)} />)}</div> : liveResult && <EmptyState icon={Search} title="No live results to preview">{liveResult.message}</EmptyState>}
           </>}
         </div>
         <InternshipDetail item={selectedListing ?? undefined} loading={false} onClose={() => setSelectedListing(null)} onSave={saveLiveRole} />
@@ -253,16 +253,81 @@ function DashboardPage({ profile, runtime }: { profile?: CandidateProfile; runti
   </div>;
 }
 
-function InternshipCard({ internship, onOpen, onSave }: { internship: Internship; onOpen: () => void; onSave: () => void }) {
-  return <article className="panel job-card" data-testid={`card-internship-${internship.id}`}>
-    <div>
-      <div className="company-line"><span className="company-mark">{initials(internship.company)}</span><span className="job-company">{internship.company}</span></div>
-      <h3 className="job-title">{internship.role}</h3>
-      <div className="job-location"><MapPin />{internship.location || 'Location not specified'}{internship.remote ? ' · Remote' : ''}{internship.salary ? ` · ${internship.salary}` : ''}</div>
-      <p className="job-desc">{internship.match_summary || internship.description}</p>
-      <div className="tag-row">{internship.matched_skills?.slice(0, 4).map((skill) => <span className="tag" key={`match-${skill}`}>{skill}</span>)}{internship.source && <span className="tag">{internship.source}</span>}</div>
+function getCompanyFaviconUrl(applicationUrl: string | null) {
+  if (!applicationUrl) return null;
+  try {
+    const url = new URL(applicationUrl);
+    if (url.protocol !== 'https:') return null;
+    const domain = url.hostname.replace(/^www\./, '').toLowerCase();
+    if (!domain || !domain.includes('.')) return null;
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
+  } catch {
+    return null;
+  }
+}
+
+function CompanyLogo({ internship, size = 'regular' }: { internship: Internship; size?: 'regular' | 'large' }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const logoUrl = getCompanyFaviconUrl(internship.application_url);
+  return <div className={`company-logo ${size === 'large' ? 'company-logo-large' : ''}`} role="img" aria-label={`${internship.company} logo`} data-testid={`img-company-logo-${internship.id}`}>
+    {logoUrl && !imageFailed
+      ? <img src={logoUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setImageFailed(true)} />
+      : <span aria-hidden="true">{initials(internship.company)}</span>}
+  </div>;
+}
+
+function InternshipCard({ internship, dataMode, onOpen, onSave }: {
+  internship: Internship;
+  dataMode?: SearchResult['data_mode'];
+  onOpen: () => void;
+  onSave: () => void;
+}) {
+  const matchedSkills = internship.matched_skills?.slice(0, 3) ?? [];
+  const missingSkills = internship.missing_skills?.slice(0, 2) ?? [];
+  return <article className="panel job-card job-result-card" data-testid={`card-internship-${internship.id}`}>
+    <div className="job-result-accent" />
+    <div className="job-result-content">
+      <div className="job-card-topline">
+        <div className="job-brand">
+          <CompanyLogo internship={internship} />
+          <div className="job-brand-copy">
+            <div className="job-company-name">{internship.company}</div>
+            <div className="job-discovery-meta">
+              <span className="job-found-time"><Clock3 size={12} /> Found {formatDate(internship.date_found)}</span>
+              {dataMode && <span className={`listing-mode-pill ${dataMode === 'live' ? 'listing-mode-live' : 'listing-mode-demo'}`}>{dataMode === 'live' ? 'Live listing' : 'Demo example'}</span>}
+            </div>
+          </div>
+        </div>
+        <div className="job-match-box">
+          <div className="match-score" aria-label={`${internship.match_score}% profile match`}>{internship.match_score}<small>FIT</small></div>
+          <span>Profile match</span>
+        </div>
+      </div>
+
+      <h3 className="job-title job-result-title">{internship.role}</h3>
+
+      <div className="job-facts">
+        <span className="job-fact"><MapPin size={14} />{internship.location || 'Location not specified'}</span>
+        {internship.remote && <span className="job-fact job-fact-highlight"><BriefcaseBusiness size={13} />Remote</span>}
+        {internship.salary && <span className="job-fact job-fact-salary">{internship.salary}</span>}
+        {internship.deadline && <span className="job-fact"><Clock3 size={13} />Apply by {formatDate(internship.deadline)}</span>}
+      </div>
+
+      <p className="job-desc job-result-summary">{internship.match_summary || internship.description || 'Open the role details to review the full listing.'}</p>
+
+      {(matchedSkills.length > 0 || missingSkills.length > 0) && <div className="job-skills-block">
+        {matchedSkills.length > 0 && <div className="job-skill-group"><span className="job-skill-label">Your matching skills</span><div className="tag-row">{matchedSkills.map((skill) => <span className="tag job-match-tag" key={`match-${skill}`}>{skill}</span>)}</div></div>}
+        {missingSkills.length > 0 && <div className="job-skill-group job-gap-group"><span className="job-skill-label">Worth reviewing</span><div className="tag-row">{missingSkills.map((skill) => <span className="tag job-gap-tag" key={`gap-${skill}`}>{skill}</span>)}</div></div>}
+      </div>}
+
+      <footer className="job-result-footer">
+        <span className="job-source-copy">{internship.source ? `Source · ${internship.source}` : 'Source not provided'}</span>
+        <div className="job-result-actions">
+          <button className="btn btn-outline job-save-button" onClick={onSave} data-testid={`button-save-${internship.id}`}><Bookmark size={14} />Save role</button>
+          <button className="btn btn-primary job-details-button" onClick={onOpen} data-testid={`button-details-${internship.id}`}>View details <ChevronRight size={14} /></button>
+        </div>
+      </footer>
     </div>
-    <div className="job-side"><div className="match-score" aria-label={`${internship.match_score}% match`}>{internship.match_score}<small>FIT</small></div><div className="job-action-row"><button className="icon-button" title="Save to tracker" onClick={onSave} data-testid={`button-save-${internship.id}`}><Bookmark size={15} /></button><button className="btn btn-quiet" onClick={onOpen} data-testid={`button-details-${internship.id}`}>Details <ChevronRight size={13} /></button></div></div>
   </article>;
 }
 
@@ -272,7 +337,7 @@ function InternshipDetail({ item, loading, onClose, onSave }: { item?: Internshi
     <section className="detail-drawer" role="dialog" aria-modal="true" aria-label="Internship details">
       <div className="drawer-top"><span className="eyebrow" style={{ margin: 0 }}>Role evidence</span><button className="icon-button" onClick={onClose} aria-label="Close details" data-testid="button-close-details"><X size={16} /></button></div>
       {loading || !item ? <LoadingPanel rows={6} /> : <>
-        <div className="company-line"><span className="company-mark">{initials(item.company)}</span><div><div className="job-company">{item.company}</div><span className="job-location">{item.location || 'Location not specified'}{item.remote ? ' · Remote' : ''}</span></div></div>
+        <div className="detail-company-heading"><CompanyLogo internship={item} size="large" /><div><div className="job-company">{item.company}</div><span className="job-location">{item.location || 'Location not specified'}{item.remote ? ' · Remote' : ''}</span></div></div>
         <h2 className="page-title" style={{ fontSize: 30, marginTop: 17 }}>{item.role}</h2>
         <div className="detail-summary"><div className="match-score">{item.match_score}<small>FIT</small></div><div><strong style={{ font: '700 13px var(--app-font-serif)', color: '#31513d' }}>Why this might fit</strong><p>{item.match_summary || 'No match summary was provided. Review the evidence below against the full role description.'}</p></div></div>
         <div className="evidence-row">
@@ -355,7 +420,7 @@ function InternshipsPage({ profile, runtime }: { profile?: CandidateProfile; run
       <div><h2 className="results-title">{result ? `${result.count} results` : 'Recent opportunities'}</h2><span className="panel-kicker">{result ? `Search mode · ${result.ai_used ? 'AI assisted' : 'standard matching'}` : 'Roles available in this session'}</span></div>
       <div className="results-meta">{result ? <>{result.data_mode === 'demo' ? <span className="demo-label">Demo listings</span> : <span className="live-label">Live results</span>}{result.demo_sample_profile && <span className="demo-label">Sample profile scores</span>}</> : <span>{items.length} listed</span>}<Filter size={14} /></div>
     </div>
-    {list.isLoading && !result ? <LoadingPanel rows={7} /> : items.length ? <div className="job-list">{items.map((item) => <InternshipCard key={item.id} internship={item} onOpen={() => setSelectedId(item.id)} onSave={() => save(item)} />)}</div> : <EmptyState icon={Search} title={result ? 'No roles matched that search' : 'No opportunities loaded'}>{result ? 'Try broader role terms, remove a location filter, or change the remote preference.' : 'Search for a role or skill to find available opportunities. Demo examples appear only when enabled and are labeled as examples.'}</EmptyState>}
+    {list.isLoading && !result ? <LoadingPanel rows={7} /> : items.length ? <div className="job-list">{items.map((item) => <InternshipCard key={item.id} internship={item} dataMode={result?.data_mode} onOpen={() => setSelectedId(item.id)} onSave={() => save(item)} />)}</div> : <EmptyState icon={Search} title={result ? 'No roles matched that search' : 'No opportunities loaded'}>{result ? 'Try broader role terms, remove a location filter, or change the remote preference.' : 'Search for a role or skill to find available opportunities. Demo examples appear only when enabled and are labeled as examples.'}</EmptyState>}
     <InternshipDetail item={detail ?? items.find((item) => item.id === selectedId)} loading={Boolean(selectedId) && detailLoading} onClose={() => setSelectedId(null)} onSave={save} />
   </div>;
 }

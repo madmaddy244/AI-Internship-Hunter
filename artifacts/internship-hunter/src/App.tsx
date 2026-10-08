@@ -60,8 +60,10 @@ function titleCase(value: string) {
 
 function RuntimeBadge({ status }: { status?: RuntimeStatus }) {
   if (!status) return <span className="status-pill"><span className="live-dot" />Checking services</span>;
-  const ok = status.ai_configured && status.search_configured;
-  return <span className="status-pill"><span className="live-dot" style={{ background: ok ? '#8bc3a5' : '#e0ae64' }} />{ok ? 'Services ready' : 'Setup needed'}</span>;
+  const missing = Number(!status.ai_configured) + Number(!status.search_configured);
+  const ok = missing === 0;
+  const label = ok ? 'Services ready' : `${missing} API key${missing === 1 ? '' : 's'} left`;
+  return <span className="status-pill"><span className="live-dot" style={{ background: ok ? '#8bc3a5' : '#e0ae64' }} />{label}</span>;
 }
 
 function Shell({ children, status, profile }: { children: ReactNode; status?: RuntimeStatus; profile?: CandidateProfile }) {
@@ -84,7 +86,7 @@ function Shell({ children, status, profile }: { children: ReactNode; status?: Ru
         </nav>
         <div className="sidebar-bottom">
           <div className="side-status">
-            <div className="side-status-top"><span><span className="live-dot" />Runtime</span><span>{status ? (status.ai_configured ? 'AI on' : 'AI off') : 'checking'}</span></div>
+            <div className="side-status-top"><span><span className="live-dot" />Runtime</span><span>{status ? (status.ai_configured && status.search_configured ? 'Ready' : `${Number(!status.ai_configured) + Number(!status.search_configured)} keys left`) : 'checking'}</span></div>
             <p>{status?.message || 'Checking configured search and language providers.'}</p>
           </div>
           <Link href="/resume" className="profile-shortcut" data-testid="link-profile-shortcut">
@@ -196,7 +198,7 @@ function DashboardPage({ profile, runtime }: { profile?: CandidateProfile; runti
   }
   return <div className="page-content">
     <PageHeading eyebrow="Your internship fieldnotes" title={readyProfile ? `Good to see you, ${profile?.name?.split(' ')[0]}.` : 'A clearer path to your next role.'} description="Find roles that fit what you can actually show. Prepare thoughtfully, then apply yourself." action={<Link href="/internships" className="btn btn-primary" data-testid="button-find-roles"><Search size={15} /> Explore opportunities</Link>} />
-    {(!runtime?.ai_configured || !runtime?.search_configured) && <div className="alert alert-warn" data-testid="status-provider-not-configured">{runtime?.message || 'Provider configuration is still being checked.'} Search and writing availability depends on the providers configured for this workspace.</div>}
+    {(!runtime?.ai_configured || !runtime?.search_configured) && <div className="alert alert-warn" data-testid="status-provider-not-configured">{runtime?.message || 'Provider status is still being checked.'} <Link href="/settings" style={{ color: '#805e31', fontWeight: 700 }}>See private key setup</Link></div>}
     {!readyProfile && <div className="alert alert-info" data-testid="status-no-profile">Add a resume or candidate profile to get evidence-based match signals. Without a profile, fit scores should not be treated as personalized.</div>}
     {isLoading ? <LoadingPanel rows={5} /> : isError ? <ErrorNotice message="Dashboard data could not be loaded." retry={retry} /> : dashboard ? <>
       <section className="stat-grid" aria-label="Application overview">
@@ -227,7 +229,7 @@ function DashboardPage({ profile, runtime }: { profile?: CandidateProfile; runti
           {!runtime ? <LoadingPanel rows={2} /> : !runtime.search_configured ? <div className="empty-state live-preview-empty">
             <div className="empty-icon"><Search size={19} /></div>
             <h3>Live search is not configured</h3>
-            <p>Add TAVILY_API_KEY in Replit Secrets to load real web results. This preview will not substitute fictional Demo Mode listings.</p>
+            <p>Add TAVILY_API_KEY privately in Replit Tools → Secrets, then restart the API Server workflow to load real web results. This preview will not substitute fictional Demo Mode listings.</p>
             <Link href="/internships" className="btn btn-outline">Explore clearly labeled demo roles <ChevronRight size={13} /></Link>
           </div> : <>
             <form className="live-preview-form" onSubmit={refreshLivePreview}>
@@ -330,7 +332,7 @@ function InternshipsPage({ profile, runtime }: { profile?: CandidateProfile; run
   return <div className="page-content">
     <PageHeading eyebrow="Opportunity search" title="Find work worth your time." description="Search current listings when a provider is configured, or explore clearly marked sample roles. Fit signals are evidence, not a hiring prediction." />
     {!profile?.name && !(demoMode && demoSampleProfile) && <div className="alert alert-info" data-testid="status-profile-needed">No candidate profile is loaded. Search still works, but personalized match scores may be unavailable. <Link href="/resume" style={{ color: '#37664a', fontWeight: 700 }}>Build your profile</Link></div>}
-    {runtime && !runtime.search_configured && <div className="alert alert-warn" data-testid="status-search-unconfigured">Live search is not configured. Enable demo listings below for examples; examples are not current openings.</div>}
+    {runtime && !runtime.search_configured && <div className="alert alert-warn" data-testid="status-search-unconfigured">The app is ready; add TAVILY_API_KEY in Replit Tools → Secrets and restart the API Server workflow to enable live search. Demo examples are not current openings.</div>}
     {demoMode && demoSampleProfile && !result?.demo_sample_profile && <div className="alert alert-info" data-testid="status-demo-profile-preview">A fictional sample profile will be used for these example match scores. Your saved profile will not be changed.</div>}
     {notice && <div className="alert alert-info" role="status" data-testid="status-search-message">{notice}<button className="icon-button" style={{ float: 'right', width: 25, height: 25 }} onClick={() => setNotice('')} aria-label="Dismiss message"><X size={13} /></button></div>}
     <form className="panel search-panel" onSubmit={runSearch}>
@@ -556,7 +558,7 @@ function AssistantPage({ profile, runtime }: { profile?: CandidateProfile; runti
   return <div className="page-content">
     <PageHeading eyebrow="Profile-aware assistant" title="Ask better questions of your profile." description="Use the assistant to understand your experience and explore role fit. Answers are guidance to review, not an application or a guarantee." />
     {!profile?.name && <div className="alert alert-warn" data-testid="status-assistant-no-profile">No candidate profile is loaded. Add your resume first for profile-aware answers. <Link href="/resume" style={{ color: '#37664a', fontWeight: 700 }}>Set up profile</Link></div>}
-    {runtime && !runtime.ai_configured && <div className="alert alert-warn" data-testid="status-ai-unconfigured">AI provider is not configured. Assistant replies may be unavailable; no provider is implied by this interface.</div>}
+    {runtime && !runtime.ai_configured && <div className="alert alert-warn" data-testid="status-ai-unconfigured">The app is ready; add NEBIUS_API_KEY privately in Replit Tools → Secrets and restart the API Server workflow to enable AI assistant replies.</div>}
     <div className="assistant-layout">
       <div className="assistant-intro"><div className="assistant-mark"><Sparkles size={18} /></div><div><h2>Ask about evidence, not magic.</h2><p>Answers use the candidate profile and tracked opportunities available in this session.</p></div></div>
       <section className="panel">
@@ -576,10 +578,15 @@ function AssistantPage({ profile, runtime }: { profile?: CandidateProfile; runti
 
 function SettingsPage({ runtime, health }: { runtime?: RuntimeStatus; health: UseQueryResult<HealthStatus, Error> }) {
   return <div className="page-content">
-    <PageHeading eyebrow="Workspace configuration" title="Know what is connected." description="Provider readiness affects whether live search and tailored writing can run. Demo roles are examples, not current job openings." />
+    <PageHeading eyebrow="Workspace configuration" title="Know what is connected." description="The app is built; provider API keys are the last setup step for live search and AI writing. Demo roles are examples, not current job openings." />
     {health.isError && <ErrorNotice message="The API health check failed. Some workspace features may be unavailable." retry={() => void health.refetch()} />}
     {!runtime && (health.isLoading ? <LoadingPanel rows={4} /> : <EmptyState icon={Cloud} title="Provider status unavailable">The runtime status could not be loaded. Check the API server and retry.</EmptyState>)}
-    {runtime && <div className="settings-grid">
+    {runtime && <>
+      <div className="alert alert-info" data-testid="status-final-provider-setup">
+        <strong>The app build is complete.</strong> Add the missing provider keys privately in Replit: open <strong>Tools → Secrets</strong> under Setup, choose <strong>+ New secret</strong>, enter the key name and value, then add it.
+        <br />Use <strong>TAVILY_API_KEY</strong> for live internship listings and <strong>NEBIUS_API_KEY</strong> for AI writing and assistant features. Save the secret, then restart the API Server workflow. You do not need to paste keys in chat or code.
+      </div>
+      <div className="settings-grid">
       <section className="panel">
         <header className="panel-head"><div><h2 className="panel-title">Provider readiness</h2><p className="panel-kicker">Reported by this workspace runtime</p></div><Cloud size={16} color="#77907c" /></header>
         <div className="panel-body">
@@ -593,7 +600,8 @@ function SettingsPage({ runtime, health }: { runtime?: RuntimeStatus; health: Us
         <section className="panel"><header className="panel-head"><div><h2 className="panel-title">Data mode, clearly labeled</h2><p className="panel-kicker">Search results identify their source mode</p></div><Filter size={16} color="#77907c" /></header><div className="panel-body"><div className="callout" style={{ background: runtime.search_configured ? '#e5eee6' : '#fbf0dc', color: runtime.search_configured ? '#355643' : '#805e31' }}><strong>{runtime.search_configured ? 'Live search provider reported as configured' : 'Demo mode may be needed'}</strong><p>{runtime.search_configured ? 'Search results are labeled live or demo according to the API response.' : 'If demo listings are available, enable the explicit demo option in Explore roles. Those examples are not current openings.'}</p></div></div></section>
         <section className="panel"><header className="panel-head"><div><h2 className="panel-title">What this agent does</h2><p className="panel-kicker">A deliberate human-in-the-loop workflow</p></div><Heart size={16} color="#77907c" /></header><div className="panel-body"><ol className="bullet-list"><li>Search for internships and review the source.</li><li>Compare your profile with role requirements.</li><li>Generate and edit material for your own review.</li><li>Open the employer page and apply manually.</li></ol><div className="alert alert-warn" style={{ margin: '15px 0 0' }}>This product does not submit external applications.</div></div></section>
       </div>
-    </div>}
+      </div>
+    </>}
   </div>;
 }
 

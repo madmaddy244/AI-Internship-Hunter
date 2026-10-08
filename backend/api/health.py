@@ -25,15 +25,21 @@ def runtime_status() -> RuntimeStatus:
     configured_ai = ai_enabled()
     configured_search = search_enabled()
     if configured_ai and configured_search:
-        message = "Nebius Token Factory and Tavily are configured."
+        message = "App setup is complete. Nebius AI and Tavily live search are connected."
     elif configured_ai:
-        message = "Nemotron is configured. Live search needs TAVILY_API_KEY; sample listings are available in Demo Mode."
+        message = (
+            "The app is built and ready. Only live search needs setup: add TAVILY_API_KEY in Replit Secrets. "
+            "AI writing is already connected."
+        )
     elif configured_search:
-        message = "Tavily is configured. Nemotron AI features need NEBIUS_API_KEY."
+        message = (
+            "The app is built and ready. Only AI writing needs setup: add NEBIUS_API_KEY in Replit Secrets. "
+            "Live search is already connected."
+        )
     else:
         message = (
-            "Nemotron and live search are not configured. Add NEBIUS_API_KEY and TAVILY_API_KEY, "
-            "or use clearly labeled Demo Mode."
+            "The app is built and ready. The only remaining setup is adding provider API keys in Replit Secrets: "
+            "NEBIUS_API_KEY for AI writing and TAVILY_API_KEY for live internship search."
         )
     return RuntimeStatus(
         ai_configured=configured_ai,

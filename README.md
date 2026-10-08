@@ -38,7 +38,7 @@ Requirements: Python 3.12+, Node.js 24+, and pnpm.
    python -m pip install -r requirements.txt
    ```
 
-2. Copy `.env.example` to `.env`. Set `NEBIUS_API_KEY` to enable Nemotron and optionally set `TAVILY_API_KEY` for live internship searches. Keep credentials in Replit Secrets or an untracked `.env`; never commit them.
+2. For Replit, open **Tools → Secrets** (under Setup) and choose **+ New secret**. Add `TAVILY_API_KEY` for live internship search and `NEBIUS_API_KEY` for AI writing and assistant features. Restart the API Server workflow after adding keys. For local development, copy `.env.example` to `.env`; never commit credentials.
 
 3. Start FastAPI from the repository root:
 

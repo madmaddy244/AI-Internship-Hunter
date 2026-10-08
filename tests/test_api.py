@@ -9,6 +9,8 @@ def test_health_and_runtime_status_are_explicit_without_provider_secrets(client)
     assert status.json()["search_configured"] is False
     assert "NEBIUS_API_KEY" in status.json()["message"]
     assert "TAVILY_API_KEY" in status.json()["message"]
+    assert "app is built and ready" in status.json()["message"].lower()
+    assert "Replit Secrets" in status.json()["message"]
     assert "api_key" not in status.text
 
 

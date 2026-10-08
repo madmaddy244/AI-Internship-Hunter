@@ -106,6 +106,7 @@ class SearchInput(AppModel):
     location: str = Field(default="", max_length=120)
     remote_only: bool = False
     demo_mode: bool = False
+    demo_sample_profile: bool = False
     max_results: int = Field(default=12, ge=1, le=20)
 
 
@@ -113,6 +114,7 @@ class SearchResult(AppModel):
     jobs: list[Internship]
     count: int
     data_mode: Literal["live", "demo"]
+    demo_sample_profile: bool = False
     ai_used: bool
     message: str
 
@@ -144,6 +146,7 @@ class ApplicationUpdate(AppModel):
 
 class GenerateMaterialInput(AppModel):
     kind: MaterialKind
+    demo_template: bool = False
 
 
 class GeneratedMaterial(AppModel):

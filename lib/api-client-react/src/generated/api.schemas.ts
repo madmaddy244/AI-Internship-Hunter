@@ -116,6 +116,7 @@ export interface SearchInput {
   location: string;
   remote_only: boolean;
   demo_mode: boolean;
+  demo_sample_profile?: boolean;
   /**
      * @minimum 1
      * @maximum 20
@@ -135,6 +136,7 @@ export interface SearchResult {
   jobs: Internship[];
   count: number;
   data_mode: SearchResultDataMode;
+  demo_sample_profile: boolean;
   ai_used: boolean;
   message: string;
 }
@@ -208,6 +210,7 @@ export const GenerateMaterialInputKind = {
 
 export interface GenerateMaterialInput {
   kind: GenerateMaterialInputKind;
+  demo_template?: boolean;
 }
 
 export interface GeneratedMaterial {

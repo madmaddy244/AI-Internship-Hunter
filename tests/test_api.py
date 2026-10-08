@@ -12,6 +12,32 @@ def test_health_and_runtime_status_are_explicit_without_provider_secrets(client)
     assert "api_key" not in status.text
 
 
+def test_demo_sample_profile_is_ephemeral_and_reported(client):
+    search = client.post(
+        "/api/internships/search",
+        json={
+            "query": "machine learning",
+            "location": "Hyderabad",
+            "demo_mode": True,
+            "demo_sample_profile": True,
+        },
+    )
+
+    assert search.status_code == 200
+    result = search.json()
+    assert result["data_mode"] == "demo"
+    assert result["demo_sample_profile"] is True
+    assert result["jobs"][0]["matched_skills"] == [
+        "Python",
+        "SQL",
+        "scikit-learn",
+        "Machine Learning",
+    ]
+    saved_profile = client.get("/api/profile").json()["profile"]
+    assert saved_profile["name"] == ""
+    assert saved_profile["skills"] == []
+
+
 def test_demo_search_save_tracker_status_and_dashboard_flow(client):
     profile = client.put(
         "/api/profile",
@@ -61,6 +87,18 @@ def test_demo_search_save_tracker_status_and_dashboard_flow(client):
     assert application["status"] == "saved"
     assert application["date_applied"] is None
 
+    template = client.post(
+        f"/api/applications/{application['id']}/generate",
+        json={"kind": "cover_letter", "demo_template": True},
+    )
+    assert template.status_code == 200
+    assert template.json()["ai_used"] is False
+    assert template.json()["model"] == "Demo template (not AI)"
+    assert template.json()["content"].startswith("SAMPLE TEMPLATE — NOT AI-GENERATED")
+    assert "[Your name]" in template.json()["content"]
+    stored_template = client.get(f"/api/applications/{application['id']}").json()
+    assert stored_template["generated_material"]["cover_letter"] == template.json()["content"]
+
     updated = client.patch(
         f"/api/applications/{application['id']}",
         json={
@@ -82,6 +120,41 @@ def test_demo_search_save_tracker_status_and_dashboard_flow(client):
     assert dashboard.json()["interviews"] == 1
     assert dashboard.json()["applications"] == 1
     assert dashboard.json()["recent_activity"]
+
+
+def test_demo_templates_are_rejected_for_live_listings(client, monkeypatch):
+    import backend.api.internships as internships_api
+
+    monkeypatch.setattr(internships_api, "search_enabled", lambda: True)
+    monkeypatch.setattr(
+        internships_api,
+        "search_internships",
+        lambda query, limit: [
+            {
+                "title": "Machine Learning Intern at Acme",
+                "url": "https://acme.example/careers/interns/ml",
+                "content": "Internship role using Python and PyTorch.",
+            }
+        ],
+    )
+    search = client.post(
+        "/api/internships/search",
+        json={"query": "Machine Learning", "demo_mode": False},
+    )
+    assert search.status_code == 200
+    assert search.json()["demo_sample_profile"] is False
+
+    saved = client.post(
+        "/api/applications",
+        json={"internship_id": search.json()["jobs"][0]["id"]},
+    )
+    template = client.post(
+        f"/api/applications/{saved.json()['id']}/generate",
+        json={"kind": "cover_letter", "demo_template": True},
+    )
+
+    assert template.status_code == 409
+    assert "fictional Demo Mode listings" in template.json()["detail"]
 
 
 def test_provider_dependent_actions_fail_explicitly_when_unconfigured(client):

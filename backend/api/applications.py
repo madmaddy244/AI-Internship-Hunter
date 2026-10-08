@@ -11,6 +11,7 @@ from backend.models import (
     ApplicationUpdate,
     GenerateMaterialInput,
     GeneratedMaterial,
+    Internship,
     SaveApplicationInput,
 )
 from backend.services.activity_service import record_activity
@@ -23,6 +24,7 @@ from backend.services.application_service import (
     save_generated_material,
     update_application,
 )
+from backend.services.demo_material import create_demo_template
 from backend.services.nebius_client import NebiusError
 
 logger = logging.getLogger(__name__)
@@ -114,17 +116,48 @@ def generate(
         if application is None:
             raise HTTPException(status_code=404, detail="Application not found.")
         profile = read_profile(connection, session_id)
-    try:
-        content = generate_material(application, profile, body.kind)
-    except NebiusError as error:
-        raise HTTPException(
-            status_code=error.status_code, detail=error.public_message
-        ) from None
-    except Exception as error:
-        logger.warning("Application draft generation failed (%s)", type(error).__name__)
-        raise HTTPException(
-            status_code=502, detail="Nemotron could not generate this draft. Try again."
-        ) from None
+        internship_row = None
+        if body.demo_template:
+            internship_row = connection.execute(
+                "SELECT data_json FROM internships WHERE session_id = ? AND id = ?",
+                (session_id, application["internship_id"]),
+            ).fetchone()
+
+    if body.demo_template:
+        if internship_row is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Sample templates are only available for fictional Demo Mode listings.",
+            )
+        internship = Internship.model_validate_json(internship_row["data_json"])
+        if not internship.source.startswith("Demo sample dataset · fictional listing"):
+            raise HTTPException(
+                status_code=409,
+                detail="Sample templates are only available for fictional Demo Mode listings.",
+            )
+        content = create_demo_template(internship, body.kind)
+        material = {
+            "kind": body.kind,
+            "content": content,
+            "ai_used": False,
+            "model": "Demo template (not AI)",
+        }
+        activity_message = f"Prepared a sample {body.kind.replace('_', ' ')} template (not AI-generated)"
+    else:
+        try:
+            content = generate_material(application, profile, body.kind)
+        except NebiusError as error:
+            raise HTTPException(
+                status_code=error.status_code, detail=error.public_message
+            ) from None
+        except Exception as error:
+            logger.warning("Application draft generation failed (%s)", type(error).__name__)
+            raise HTTPException(
+                status_code=502, detail="Nemotron could not generate this draft. Try again."
+            ) from None
+        material = material_result(body.kind, content)
+        activity_message = f"Nemotron generated a {body.kind.replace('_', ' ')} draft"
+
     with connect() as connection:
         save_generated_material(
             connection, session_id, application_id, body.kind, content
@@ -132,7 +165,7 @@ def generate(
         record_activity(
             connection,
             session_id,
-            f"Nemotron generated a {body.kind.replace('_', ' ')} draft",
+            activity_message,
             "generation",
         )
-    return GeneratedMaterial(**material_result(body.kind, content))
+    return GeneratedMaterial(**material)

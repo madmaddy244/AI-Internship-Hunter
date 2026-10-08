@@ -430,6 +430,7 @@ components:
         location: { type: string }
         remote_only: { type: boolean }
         demo_mode: { type: boolean }
+        demo_sample_profile: { type: boolean }
         max_results: { type: integer, minimum: 1, maximum: 20 }
       required: [query, location, remote_only, demo_mode, max_results]
     SearchResult:
@@ -441,9 +442,10 @@ components:
             $ref: "#/components/schemas/Internship"
         count: { type: integer }
         data_mode: { type: string, enum: [live, demo] }
+        demo_sample_profile: { type: boolean }
         ai_used: { type: boolean }
         message: { type: string }
-      required: [jobs, count, data_mode, ai_used, message]
+      required: [jobs, count, data_mode, demo_sample_profile, ai_used, message]
     Application:
       type: object
       properties:
@@ -479,6 +481,7 @@ components:
       type: object
       properties:
         kind: { type: string, enum: [cover_letter, recruiter_message, application_email, preparation_suggestions] }
+        demo_template: { type: boolean }
       required: [kind]
     GeneratedMaterial:
       type: object

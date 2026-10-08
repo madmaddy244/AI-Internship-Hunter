@@ -9,4 +9,5 @@ import type { GenerateMaterialInputKind } from './generateMaterialInputKind';
 
 export interface GenerateMaterialInput {
   kind: GenerateMaterialInputKind;
+  demo_template?: boolean;
 }

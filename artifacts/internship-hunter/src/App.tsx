@@ -16,7 +16,7 @@ import {
 } from '@workspace/api-client-react';
 import type {
   Application, ApplicationStatus, CandidateProfile, GenerateMaterialInputKind,
-  HealthStatus, Internship, ProfileInput, ProfileState, RuntimeStatus, SearchInput,
+  HealthStatus, Internship, ProfileInput, ProfileState, RuntimeStatus, SearchInput, SearchResult,
 } from '@workspace/api-client-react';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -128,7 +128,17 @@ function DashboardPage({ profile, runtime }: { profile?: CandidateProfile; runti
   const queryClient = useQueryClient();
   const { data: applications = [] } = useListApplications();
   const { data: internships = [] } = useListInternships({ limit: 100 });
+  const livePreviewSearch = useSearchInternships();
+  const savePreviewRole = useSaveApplication();
+  const [liveQuery, setLiveQuery] = useState('');
+  const [liveLocation, setLiveLocation] = useState('');
+  const [liveResult, setLiveResult] = useState<SearchResult | null>(null);
+  const [liveError, setLiveError] = useState('');
+  const [liveNotice, setLiveNotice] = useState('');
+  const [selectedListing, setSelectedListing] = useState<Internship | null>(null);
   const readyProfile = Boolean(profile?.name?.trim());
+  const defaultRole = profile?.preferred_roles?.[0] || 'AI internship';
+  const defaultLocation = profile?.locations?.[0] || '';
   const stats = dashboard ? [
     ['Roles found', dashboard.internships_found, 'Across recent searches'],
     ['Saved', dashboard.saved, 'Worth a closer look'],
@@ -136,6 +146,54 @@ function DashboardPage({ profile, runtime }: { profile?: CandidateProfile; runti
     ['Interviews', dashboard.interviews, 'Conversations in motion'],
   ] : [];
   const retry = () => { void refetch(); void queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() }); };
+  async function refreshLivePreview(event: FormEvent) {
+    event.preventDefault();
+    if (!runtime?.search_configured) return;
+    const query = liveQuery.trim() || defaultRole;
+    if (query.length < 2) {
+      setLiveError('Enter at least two characters for a live search.');
+      return;
+    }
+    setLiveError('');
+    setLiveNotice('');
+    setLiveResult(null);
+    try {
+      const response = await livePreviewSearch.mutateAsync({
+        data: {
+          query,
+          location: liveLocation.trim(),
+          remote_only: false,
+          demo_mode: false,
+          demo_sample_profile: false,
+          max_results: 3,
+        },
+      });
+      if (response.data_mode !== 'live') {
+        throw new Error('The server did not return live search results.');
+      }
+      setLiveResult(response);
+      setLiveNotice(
+        response.count
+          ? `${response.count} live web result${response.count === 1 ? '' : 's'} found. Verify each opening on the employer’s page.`
+          : response.message,
+      );
+      void queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
+      void queryClient.invalidateQueries({ queryKey: getListInternshipsQueryKey() });
+    } catch {
+      setLiveError('Live search failed. Check provider status in Settings; Demo Mode results are not substituted here.');
+    }
+  }
+  function saveLiveRole(item: Internship) {
+    savePreviewRole.mutate({ data: { internship_id: item.id, notes: '' } }, {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getListApplicationsQueryKey() });
+        void queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
+        setLiveNotice(`${item.role} saved to your tracker. No external application was submitted.`);
+        setSelectedListing(null);
+      },
+      onError: () => setLiveError('Could not save this live result to your tracker. Please try again.'),
+    });
+  }
   return <div className="page-content">
     <PageHeading eyebrow="Your internship fieldnotes" title={readyProfile ? `Good to see you, ${profile?.name?.split(' ')[0]}.` : 'A clearer path to your next role.'} description="Find roles that fit what you can actually show. Prepare thoughtfully, then apply yourself." action={<Link href="/internships" className="btn btn-primary" data-testid="button-find-roles"><Search size={15} /> Explore opportunities</Link>} />
     {(!runtime?.ai_configured || !runtime?.search_configured) && <div className="alert alert-warn" data-testid="status-provider-not-configured">{runtime?.message || 'Provider configuration is still being checked.'} Search and writing availability depends on the providers configured for this workspace.</div>}
@@ -160,6 +218,31 @@ function DashboardPage({ profile, runtime }: { profile?: CandidateProfile; runti
           <section className="callout"><strong>Make the match explain itself.</strong><p>Each role shows evidence found in your profile and the requirements that still need a closer look.</p></section>
         </div>
       </div>
+      <section className="panel live-preview-panel" aria-labelledby="live-preview-title" data-testid="section-live-preview">
+        <header className="panel-head">
+          <div><h2 className="panel-title" id="live-preview-title">Live listing preview</h2><p className="panel-kicker">Search the web on demand · not guaranteed to still be open</p></div>
+          <Link href="/settings" className="btn btn-quiet" data-testid="link-live-preview-settings">Search settings <ChevronRight size={13} /></Link>
+        </header>
+        <div className="panel-body">
+          {!runtime ? <LoadingPanel rows={2} /> : !runtime.search_configured ? <div className="empty-state live-preview-empty">
+            <div className="empty-icon"><Search size={19} /></div>
+            <h3>Live search is not configured</h3>
+            <p>Add TAVILY_API_KEY in Replit Secrets to load real web results. This preview will not substitute fictional Demo Mode listings.</p>
+            <Link href="/internships" className="btn btn-outline">Explore clearly labeled demo roles <ChevronRight size={13} /></Link>
+          </div> : <>
+            <form className="live-preview-form" onSubmit={refreshLivePreview}>
+              <label className="input-wrap"><Search /><input className="field" value={liveQuery} onChange={(event) => setLiveQuery(event.target.value)} placeholder={defaultRole} aria-label="Role for live listing preview" data-testid="input-live-preview-query" /></label>
+              <label className="input-wrap"><MapPin /><input className="field" value={liveLocation} onChange={(event) => setLiveLocation(event.target.value)} placeholder={defaultLocation || 'Any location'} aria-label="Location for live listing preview" data-testid="input-live-preview-location" /></label>
+              <button className="btn btn-primary" type="submit" disabled={livePreviewSearch.isPending} data-testid="button-refresh-live-preview">{livePreviewSearch.isPending ? <LoaderCircle size={15} /> : <Search size={15} />}{livePreviewSearch.isPending ? 'Searching live listings…' : 'Refresh live preview'}</button>
+            </form>
+            <p className="live-preview-disclaimer">Uses the role above and an optional location filter. Check the employer’s page to confirm each listing is still accepting applications.</p>
+            {liveError && <ErrorNotice message={liveError} />}
+            {liveNotice && <div className="alert alert-info" role="status" data-testid="status-live-preview-message">{liveNotice}</div>}
+            {liveResult?.jobs.length ? <div className="job-list">{liveResult.jobs.map((item) => <InternshipCard key={item.id} internship={item} onOpen={() => setSelectedListing(item)} onSave={() => saveLiveRole(item)} />)}</div> : liveResult && <EmptyState icon={Search} title="No live results to preview">{liveResult.message}</EmptyState>}
+          </>}
+        </div>
+        <InternshipDetail item={selectedListing ?? undefined} loading={false} onClose={() => setSelectedListing(null)} onSave={saveLiveRole} />
+      </section>
       <section style={{ marginTop: 18 }}>
         <div className="results-head"><h2 className="results-title">Recently saved</h2><Link href="/tracker" className="btn btn-outline" data-testid="link-all-saved">View tracker <ArrowUpRight size={13} /></Link></div>
         {applications.length ? <div className="job-list">{applications.slice(0, 3).map((app) => <div className="panel job-card" key={app.id}><div><div className="job-company">{app.company}</div><h3 className="job-title" style={{ marginTop: 6 }}>{app.role}</h3><div className="job-location"><Clock3 />{titleCase(app.status)} · added {formatDate(app.created_at)}</div></div><Link href="/tracker" className="btn btn-quiet">Details <ChevronRight size={14} /></Link></div>)}</div> : internships.length ? <div className="panel panel-body"><p style={{ fontSize: 11, color: '#788176', margin: 0 }}>You have roles to explore, but nothing saved yet.</p></div> : null}
@@ -216,18 +299,25 @@ function InternshipsPage({ profile, runtime }: { profile?: CandidateProfile; run
   const [location, setLocation] = useState('');
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [demoSampleProfile, setDemoSampleProfile] = useState(false);
   const [result, setResult] = useState<Awaited<ReturnType<typeof search.mutateAsync>> | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const { data: detail, isLoading: detailLoading } = useGetInternship(selectedId || '', { query: { enabled: Boolean(selectedId), queryKey: getGetInternshipQueryKey(selectedId || '') } });
-  useEffect(() => { if (runtime && !runtime.search_configured) setDemoMode(true); }, [runtime]);
+  useEffect(() => {
+    if (!runtime) return;
+    if (!runtime.search_configured) {
+      setDemoMode(true);
+      if (!profile?.name) setDemoSampleProfile(true);
+    }
+  }, [runtime, profile?.name]);
   const items = result?.jobs ?? list.data ?? [];
   const isDemo = result?.data_mode === 'demo' || (!result && !runtime?.search_configured && items.length > 0);
   async function runSearch(event: FormEvent) {
     event.preventDefault();
     if (query.trim().length < 2) { setNotice('Enter at least two characters to search.'); return; }
     setNotice('');
-    const input: SearchInput = { query: query.trim(), location: location.trim(), remote_only: remoteOnly, demo_mode: demoMode, max_results: 20 };
+    const input: SearchInput = { query: query.trim(), location: location.trim(), remote_only: remoteOnly, demo_mode: demoMode, demo_sample_profile: demoMode && demoSampleProfile, max_results: 20 };
     try { const response = await search.mutateAsync({ data: input }); setResult(response); }
     catch { setNotice('Search could not be completed. Check provider status in Settings, then try again.'); }
   }
@@ -239,24 +329,29 @@ function InternshipsPage({ profile, runtime }: { profile?: CandidateProfile; run
   }
   return <div className="page-content">
     <PageHeading eyebrow="Opportunity search" title="Find work worth your time." description="Search current listings when a provider is configured, or explore clearly marked sample roles. Fit signals are evidence, not a hiring prediction." />
-    {!profile?.name && <div className="alert alert-info" data-testid="status-profile-needed">No candidate profile is loaded. Search still works, but personalized match scores may be unavailable. <Link href="/resume" style={{ color: '#37664a', fontWeight: 700 }}>Build your profile</Link></div>}
+    {!profile?.name && !(demoMode && demoSampleProfile) && <div className="alert alert-info" data-testid="status-profile-needed">No candidate profile is loaded. Search still works, but personalized match scores may be unavailable. <Link href="/resume" style={{ color: '#37664a', fontWeight: 700 }}>Build your profile</Link></div>}
     {runtime && !runtime.search_configured && <div className="alert alert-warn" data-testid="status-search-unconfigured">Live search is not configured. Enable demo listings below for examples; examples are not current openings.</div>}
+    {demoMode && demoSampleProfile && !result?.demo_sample_profile && <div className="alert alert-info" data-testid="status-demo-profile-preview">A fictional sample profile will be used for these example match scores. Your saved profile will not be changed.</div>}
     {notice && <div className="alert alert-info" role="status" data-testid="status-search-message">{notice}<button className="icon-button" style={{ float: 'right', width: 25, height: 25 }} onClick={() => setNotice('')} aria-label="Dismiss message"><X size={13} /></button></div>}
     <form className="panel search-panel" onSubmit={runSearch}>
       <div className="search-form">
         <label className="input-wrap"><Search /><input className="field" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Role, skill, or company" aria-label="Search roles" data-testid="input-search-query" /></label>
         <label className="input-wrap"><MapPin /><input className="field" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location" aria-label="Location" data-testid="input-search-location" /></label>
-        <label className="checkbox-label"><input type="checkbox" checked={remoteOnly} onChange={(e) => setRemoteOnly(e.target.checked)} data-testid="checkbox-remote-only" /> Remote only</label>
-        <label className="checkbox-label"><input type="checkbox" checked={demoMode} onChange={(e) => setDemoMode(e.target.checked)} data-testid="checkbox-demo-mode" /> Include demo listings</label>
+        <div className="search-options">
+          <label className="checkbox-label"><input type="checkbox" checked={remoteOnly} onChange={(e) => setRemoteOnly(e.target.checked)} data-testid="checkbox-remote-only" /> Remote only</label>
+          <label className="checkbox-label"><input type="checkbox" checked={demoMode} onChange={(e) => { const enabled = e.target.checked; setDemoMode(enabled); if (!enabled) setDemoSampleProfile(false); else if (!profile?.name) setDemoSampleProfile(true); }} data-testid="checkbox-demo-mode" /> Include demo listings</label>
+          {demoMode && <label className="checkbox-label"><input type="checkbox" checked={demoSampleProfile} onChange={(e) => setDemoSampleProfile(e.target.checked)} data-testid="checkbox-demo-profile" /> Use fictional sample profile for scores</label>}
+        </div>
         <button className="btn btn-primary" type="submit" disabled={search.isPending} data-testid="button-search-internships">{search.isPending ? <LoaderCircle size={15} /> : <Search size={15} />}{search.isPending ? 'Searching' : 'Search roles'}</button>
       </div>
     </form>
     {search.isError && <ErrorNotice message="Search service returned an error. Provider status is available in Settings." retry={() => { if (query.trim().length >= 2) void runSearch(new Event('submit') as unknown as FormEvent); }} />}
     {result?.message && <div className={`alert ${result.data_mode === 'demo' ? 'alert-warn' : 'alert-info'}`} data-testid="status-search-result-message">{result.message}</div>}
+    {result?.demo_sample_profile && <div className="alert alert-info" data-testid="status-demo-score-source">Match scores use a fictional sample profile. Your saved candidate profile was not changed.</div>}
     {list.isError && !result && <ErrorNotice message="Saved search results could not be loaded." retry={() => void list.refetch()} />}
     <div className="results-head">
       <div><h2 className="results-title">{result ? `${result.count} results` : 'Recent opportunities'}</h2><span className="panel-kicker">{result ? `Search mode · ${result.ai_used ? 'AI assisted' : 'standard matching'}` : 'Roles available in this session'}</span></div>
-      <div className="results-meta">{result ? (result.data_mode === 'demo' ? <span className="demo-label">Demo listings</span> : <span className="live-label">Live results</span>) : <span>{items.length} listed</span>}<Filter size={14} /></div>
+      <div className="results-meta">{result ? <>{result.data_mode === 'demo' ? <span className="demo-label">Demo listings</span> : <span className="live-label">Live results</span>}{result.demo_sample_profile && <span className="demo-label">Sample profile scores</span>}</> : <span>{items.length} listed</span>}<Filter size={14} /></div>
     </div>
     {list.isLoading && !result ? <LoadingPanel rows={7} /> : items.length ? <div className="job-list">{items.map((item) => <InternshipCard key={item.id} internship={item} onOpen={() => setSelectedId(item.id)} onSave={() => save(item)} />)}</div> : <EmptyState icon={Search} title={result ? 'No roles matched that search' : 'No opportunities loaded'}>{result ? 'Try broader role terms, remove a location filter, or change the remote preference.' : 'Search for a role or skill to find available opportunities. Demo examples appear only when enabled and are labeled as examples.'}</EmptyState>}
     <InternshipDetail item={detail ?? items.find((item) => item.id === selectedId)} loading={Boolean(selectedId) && detailLoading} onClose={() => setSelectedId(null)} onSave={save} />
@@ -381,6 +476,20 @@ function TrackerPage({ profile }: { profile?: CandidateProfile }) {
     setError(''); setMessage('');
     generate.mutate({ applicationId: current.id, data: { kind: materialKind } }, { onSuccess: (material) => { setDraft(material.content); setMessage(`${titleCase(material.kind)} generated${material.ai_used ? ` with ${material.model}` : ' without configured AI'}. Edit it before saving.`); }, onError: () => setError('Material generation is unavailable. Check AI provider status in Settings.') });
   }
+  function insertDemoTemplate() {
+    if (!current) return;
+    setError(''); setMessage('');
+    generate.mutate(
+      { applicationId: current.id, data: { kind: materialKind, demo_template: true } },
+      {
+        onSuccess: (material) => {
+          setDraft(material.content);
+          setMessage('Sample template saved. Replace its placeholders with true details; this was not generated by AI.');
+        },
+        onError: () => setError('A sample template is only available for fictional Demo Mode listings.'),
+      },
+    );
+  }
   function saveMaterial() {
     if (!current) return;
     const generated_material = { ...(current.generated_material || {}), [materialKind]: draft };
@@ -401,9 +510,11 @@ function TrackerPage({ profile }: { profile?: CandidateProfile }) {
           <div className="form-field" style={{ marginTop: 14 }}><label htmlFor="application-notes">Notes</label><textarea id="application-notes" className="textarea" rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Interview date, contact, follow-up reminder…" data-testid="input-application-notes" /><button className="btn btn-quiet" style={{ marginTop: 8 }} onClick={saveNotes} disabled={update.isPending} data-testid="button-save-notes">Save notes</button></div>
           <div className="detail-section" style={{ borderTop: '1px solid #e9e7dd', paddingTop: 17 }}>
             <h3>Tailored material</h3>
+            {current.internship_id.startsWith('demo-') && <div className="alert alert-warn" data-testid="status-demo-template-warning">This is a fictional listing. Sample templates are not AI-generated; replace every placeholder with accurate details before use.</div>}
             {!profile?.name && <div className="alert alert-warn">No candidate profile is loaded. Add profile details for more relevant writing suggestions.</div>}
             <label className="form-field"><span style={{ display: 'block', marginBottom: 7, fontSize: 10, color: '#687267' }}>Material type</span><select className="select" value={materialKind} onChange={(e) => { setMaterialKind(e.target.value as GenerateMaterialInputKind); setDraft(''); }} data-testid="select-material-kind">{materialKinds.map((kind) => <option value={kind.value} key={kind.value}>{kind.label}</option>)}</select></label>
             <button className="btn btn-outline" style={{ width: '100%', marginTop: 9 }} onClick={generateMaterial} disabled={generate.isPending} data-testid="button-generate-material">{generate.isPending ? 'Preparing draft…' : <><Sparkles size={14} /> Generate a draft</>}</button>
+            {current.internship_id.startsWith('demo-') && <button className="btn btn-quiet" style={{ width: '100%', marginTop: 8 }} onClick={insertDemoTemplate} disabled={generate.isPending} data-testid="button-demo-template">{generate.isPending ? 'Preparing template…' : 'Insert sample template · not AI'}</button>}
             {(draft || Object.keys(current.generated_material || {}).length > 0) && <>
               <textarea className="textarea" style={{ marginTop: 10, minHeight: 165 }} value={draft || current.generated_material?.[materialKind] || ''} onChange={(e) => setDraft(e.target.value)} placeholder="Generated material appears here. Edit it before saving." data-testid="textarea-generated-material" />
               <button className="btn btn-primary" style={{ width: '100%', marginTop: 9 }} onClick={saveMaterial} disabled={update.isPending || !draft.trim()} data-testid="button-save-material"><Check size={14} /> Save edited material</button>

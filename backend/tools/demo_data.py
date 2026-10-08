@@ -6,6 +6,25 @@ from typing import Any
 from backend.models import CandidateProfile
 from backend.services.matching_service import add_match
 
+SAMPLE_CANDIDATE_PROFILE = CandidateProfile(
+    name="Sample candidate",
+    education=["BSc Computer Science (sample)"],
+    skills=["Python", "SQL", "Git"],
+    programming_languages=["Python"],
+    frameworks=["FastAPI", "scikit-learn"],
+    ai_ml_skills=["Machine Learning", "Computer Vision"],
+    cloud_skills=[],
+    projects=["Sample image-classification project (fictional)"],
+    experience=["Sample student research experience (fictional)"],
+    certifications=[],
+    locations=["Hyderabad", "Bengaluru", "Remote, India"],
+    preferred_roles=[
+        "Machine Learning Intern",
+        "AI Engineering Intern",
+        "Computer Vision Intern",
+    ],
+)
+
 SAMPLE_LISTINGS: list[dict[str, Any]] = [
     {
         "id": "demo-northstar-ml",

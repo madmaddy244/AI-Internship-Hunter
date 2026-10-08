@@ -191,6 +191,7 @@ export const SearchInternshipsBody = zod.object({
   "location": zod.string(),
   "remote_only": zod.boolean(),
   "demo_mode": zod.boolean(),
+  "demo_sample_profile": zod.boolean().optional(),
   "max_results": zod.number().int().min(1).max(searchInternshipsBodyMaxResultsMax)
 })
 
@@ -216,6 +217,7 @@ export const SearchInternshipsResponse = zod.object({
 })),
   "count": zod.number().int(),
   "data_mode": zod.enum(['live', 'demo']),
+  "demo_sample_profile": zod.boolean(),
   "ai_used": zod.boolean(),
   "message": zod.string()
 })
@@ -349,7 +351,8 @@ export const GenerateApplicationMaterialParams = zod.object({
 })
 
 export const GenerateApplicationMaterialBody = zod.object({
-  "kind": zod.enum(['cover_letter', 'recruiter_message', 'application_email', 'preparation_suggestions'])
+  "kind": zod.enum(['cover_letter', 'recruiter_message', 'application_email', 'preparation_suggestions']),
+  "demo_template": zod.boolean().optional()
 })
 
 export const GenerateApplicationMaterialResponse = zod.object({

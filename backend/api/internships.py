@@ -14,7 +14,7 @@ from backend.services.activity_service import record_activity
 from backend.services.agent import explain_matches, select_search_tool
 from backend.services.matching_service import add_match
 from backend.services.nebius_client import NebiusError
-from backend.tools.demo_data import demo_internships
+from backend.tools.demo_data import SAMPLE_CANDIDATE_PROFILE, demo_internships
 from backend.tools.job_parser import normalize_and_match
 from backend.tools.search_tool import SearchError, search_internships
 
@@ -86,11 +86,13 @@ def search(
     session_id: str = Depends(session_key),
 ) -> SearchResult:
     with connect() as connection:
-        profile = read_profile(connection, session_id)
+        stored_profile = read_profile(connection, session_id)
 
     ai_used = False
     ai_note = ""
     data_mode = "demo" if body.demo_mode else "live"
+    use_sample_profile = body.demo_mode and body.demo_sample_profile
+    profile = SAMPLE_CANDIDATE_PROFILE if use_sample_profile else stored_profile
     if body.demo_mode:
         jobs = demo_internships(
             body.query, body.location, body.remote_only, profile, body.max_results
@@ -180,6 +182,7 @@ def search(
         jobs=[Internship.model_validate(job) for job in jobs],
         count=len(jobs),
         data_mode=data_mode,  # type: ignore[arg-type]
+        demo_sample_profile=use_sample_profile,
         ai_used=ai_used,
         message=_summary_message(data_mode, len(jobs), ai_used, ai_note),
     )

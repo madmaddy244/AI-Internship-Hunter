@@ -12,6 +12,7 @@ export interface SearchResult {
   jobs: Internship[];
   count: number;
   data_mode: SearchResultDataMode;
+  demo_sample_profile: boolean;
   ai_used: boolean;
   message: string;
 }

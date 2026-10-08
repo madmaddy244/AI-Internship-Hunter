@@ -12,6 +12,7 @@ export interface SearchInput {
   location: string;
   remote_only: boolean;
   demo_mode: boolean;
+  demo_sample_profile?: boolean;
   /**
      * @minimum 1
      * @maximum 20
